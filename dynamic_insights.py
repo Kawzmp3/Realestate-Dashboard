@@ -3,6 +3,7 @@ import polars as pl
 import pandas as pd
 from process_data import ProcessData
 import calendar
+from typing import Dict, List, Tuple
 
 
 class CreateInsights:
@@ -341,3 +342,140 @@ class CreateInsights:
         )
 
         return insights_text
+
+class DynamicInsights:
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+        self.insights = []
+
+    def generate_all_insights(self) -> List[str]:
+        """Generate all available insights from the data."""
+        self.insights = []
+        
+        self._add_price_insights()
+        self._add_property_type_insights()
+        self._add_location_insights()
+        self._add_amenity_insights()
+        self._add_market_dynamics_insights()
+        
+        return self.insights
+
+    def _add_price_insights(self):
+        """Add insights related to property prices."""
+        median_price = self.df["list_price"].median()
+        avg_price = self.df["list_price"].mean()
+        price_std = self.df["list_price"].std()
+        
+        self.insights.append(
+            f"The median property price is ${median_price:,.2f}, "
+            f"with an average of ${avg_price:,.2f}."
+        )
+        
+        if price_std > avg_price * 0.5:
+            self.insights.append(
+                "There is significant price variation in the market, "
+                "suggesting diverse property options."
+            )
+            
+        # Price per square foot analysis
+        median_ppsf = self.df["price_per_sqft"].median()
+        self.insights.append(
+            f"The median price per square foot is ${median_ppsf:.2f}."
+        )
+        
+        # Price range distribution
+        luxury_threshold = self.df["list_price"].quantile(0.9)
+        luxury_count = len(self.df[self.df["list_price"] >= luxury_threshold])
+        self.insights.append(
+            f"There are {luxury_count} luxury properties "
+            f"priced above ${luxury_threshold:,.2f}."
+        )
+
+    def _add_property_type_insights(self):
+        """Add insights related to property types."""
+        type_counts = self.df["property_type"].value_counts()
+        most_common = type_counts.index[0]
+        pct_most_common = (type_counts[most_common] / len(self.df)) * 100
+        
+        self.insights.append(
+            f"{most_common} properties are most common, "
+            f"representing {pct_most_common:.1f}% of listings."
+        )
+        
+        # Average price by property type
+        avg_price_by_type = self.df.groupby("property_type")["list_price"].mean()
+        most_expensive_type = avg_price_by_type.idxmax()
+        self.insights.append(
+            f"{most_expensive_type} properties have the highest average price "
+            f"at ${avg_price_by_type[most_expensive_type]:,.2f}."
+        )
+
+    def _add_location_insights(self):
+        """Add insights related to property locations."""
+        if "city" in self.df.columns:
+            city_counts = self.df["city"].value_counts()
+            top_city = city_counts.index[0]
+            city_avg_price = self.df[self.df["city"] == top_city]["list_price"].mean()
+            
+            self.insights.append(
+                f"{top_city} has the most listings with {city_counts[top_city]} properties "
+                f"and an average price of ${city_avg_price:,.2f}."
+            )
+        
+        if "state" in self.df.columns:
+            state_avg_price = self.df.groupby("state")["list_price"].mean()
+            most_expensive_state = state_avg_price.idxmax()
+            self.insights.append(
+                f"{most_expensive_state} has the highest average property price "
+                f"at ${state_avg_price[most_expensive_state]:,.2f}."
+            )
+
+    def _add_amenity_insights(self):
+        """Add insights related to property amenities."""
+        if "has_pool" in self.df.columns:
+            pool_premium = (
+                self.df[self.df["has_pool"]]["list_price"].mean()
+                - self.df[~self.df["has_pool"]]["list_price"].mean()
+            )
+            if pool_premium > 0:
+                self.insights.append(
+                    f"Properties with pools command a premium of ${pool_premium:,.2f} "
+                    "on average."
+                )
+        
+        if "has_basement" in self.df.columns:
+            basement_premium = (
+                self.df[self.df["has_basement"]]["list_price"].mean()
+                - self.df[~self.df["has_basement"]]["list_price"].mean()
+            )
+            if basement_premium > 0:
+                self.insights.append(
+                    f"Properties with basements command a premium of ${basement_premium:,.2f} "
+                    "on average."
+                )
+
+    def _add_market_dynamics_insights(self):
+        """Add insights related to market dynamics."""
+        if "days_on_market" in self.df.columns:
+            median_dom = self.df["days_on_market"].median()
+            quick_sales = len(self.df[self.df["days_on_market"] <= 7])
+            
+            self.insights.append(
+                f"The median time on market is {median_dom:.0f} days, "
+                f"with {quick_sales} properties selling within a week."
+            )
+        
+        if "status" in self.df.columns:
+            active_listings = len(self.df[self.df["status"] == "Active"])
+            pending_listings = len(self.df[self.df["status"] == "Pending"])
+            
+            self.insights.append(
+                f"There are currently {active_listings} active listings "
+                f"and {pending_listings} pending sales."
+            )
+
+    def get_top_insights(self, n: int = 5) -> List[str]:
+        """Return the top N insights."""
+        if not self.insights:
+            self.generate_all_insights()
+        return self.insights[:n]

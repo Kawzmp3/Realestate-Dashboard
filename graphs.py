@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
 from wordcloud import WordCloud
 
-from typing import Tuple
+from typing import Tuple, List
 
 from process_data import ProcessData, join_descriptions
 from config import Config
@@ -694,3 +694,210 @@ class CreateGraphs:
         )
 
         return fig_wordcloud, fig_barchart
+
+def create_price_distribution_plot(df: pd.DataFrame) -> go.Figure:
+    """Create a distribution plot of property prices."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Histogram(
+            x=df["list_price"],
+            name="Price Distribution",
+            nbinsx=50,
+            marker_color="#1f77b4",
+        )
+    )
+    fig.update_layout(
+        title="Distribution of Property Prices",
+        xaxis_title="List Price ($)",
+        yaxis_title="Count",
+        showlegend=False,
+    )
+    return fig
+
+def create_price_per_sqft_plot(df: pd.DataFrame) -> go.Figure:
+    """Create a box plot of price per square foot by property type."""
+    fig = px.box(
+        df,
+        x="property_type",
+        y="price_per_sqft",
+        title="Price per Square Foot by Property Type",
+        labels={
+            "property_type": "Property Type",
+            "price_per_sqft": "Price per Square Foot ($)"
+        },
+    )
+    return fig
+
+def create_property_type_distribution(df: pd.DataFrame) -> go.Figure:
+    """Create a pie chart showing the distribution of property types."""
+    property_counts = df["property_type"].value_counts()
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=property_counts.index,
+                values=property_counts.values,
+                hole=0.3,
+            )
+        ]
+    )
+    fig.update_layout(title="Distribution of Property Types")
+    return fig
+
+def create_price_trend_plot(df: pd.DataFrame) -> go.Figure:
+    """Create a line plot showing average price trends over time."""
+    df_grouped = df.groupby("days_on_market")["list_price"].mean().reset_index()
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=df_grouped["days_on_market"],
+            y=df_grouped["list_price"],
+            mode="lines+markers",
+            name="Average Price",
+        )
+    )
+    fig.update_layout(
+        title="Average Price Trend by Days on Market",
+        xaxis_title="Days on Market",
+        yaxis_title="Average List Price ($)",
+    )
+    return fig
+
+def create_amenities_comparison(df: pd.DataFrame) -> go.Figure:
+    """Create a bar chart comparing average prices for properties with different amenities."""
+    amenities = ["has_pool", "has_basement"]
+    avg_prices = []
+    labels = []
+    
+    for amenity in amenities:
+        if amenity in df.columns:
+            avg_price_with = df[df[amenity] == True]["list_price"].mean()
+            avg_price_without = df[df[amenity] == False]["list_price"].mean()
+            
+            avg_prices.extend([avg_price_with, avg_price_without])
+            labels.extend([f"With {amenity.replace('has_', '')}", f"Without {amenity.replace('has_', '')}"])
+    
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=labels,
+                y=avg_prices,
+                marker_color=["#1f77b4", "#ff7f0e"] * (len(amenities)),
+            )
+        ]
+    )
+    fig.update_layout(
+        title="Average Prices by Amenities",
+        xaxis_title="Amenity",
+        yaxis_title="Average List Price ($)",
+    )
+    return fig
+
+def create_location_price_map(df):
+    """Create a choropleth map of property prices by state."""
+    # Aggregate data by state
+    state_data = df.groupby("state").agg({
+        "list_price": "mean",
+        "square_feet": "mean",
+        "property_type": "count"
+    }).reset_index()
+    
+    state_data = state_data.rename(columns={"property_type": "count"})
+    
+    # Create the choropleth map
+    fig = px.choropleth(
+        state_data,
+        locations="state",
+        locationmode="USA-states",
+        color="list_price",
+        scope="usa",
+        color_continuous_scale="Viridis",
+        hover_data={
+            "list_price": ":$,.0f",
+            "square_feet": ":.0f",
+            "count": ":.0f"
+        },
+        labels={
+            "list_price": "Average Price ($)",
+            "square_feet": "Average Size (sq ft)",
+            "count": "Number of Properties"
+        },
+        title="Property Prices by State"
+    )
+    
+    fig.update_layout(
+        geo_scope="usa",
+        margin={"r":0, "t":30, "l":0, "b":0}
+    )
+    
+    return fig
+
+def create_correlation_heatmap(df: pd.DataFrame, columns: List[str]) -> go.Figure:
+    """Create a correlation heatmap for numeric features."""
+    correlation_matrix = df[columns].corr()
+    
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=correlation_matrix,
+            x=correlation_matrix.columns,
+            y=correlation_matrix.columns,
+            colorscale="RdBu",
+            zmin=-1,
+            zmax=1,
+        )
+    )
+    fig.update_layout(
+        title="Feature Correlation Heatmap",
+        xaxis_title="Features",
+        yaxis_title="Features",
+    )
+    return fig
+
+def create_bedroom_bathroom_plot(df: pd.DataFrame) -> go.Figure:
+    """Create a scatter plot of bedrooms vs bathrooms with price as color."""
+    fig = px.scatter(
+        df,
+        x="bedrooms",
+        y="bathrooms",
+        color="list_price",
+        size="square_feet",
+        hover_data=["city", "property_type"],
+        title="Property Configurations: Bedrooms vs Bathrooms",
+        labels={
+            "bedrooms": "Number of Bedrooms",
+            "bathrooms": "Number of Bathrooms",
+            "list_price": "List Price ($)",
+        },
+    )
+    return fig
+
+def create_price_range_distribution(df: pd.DataFrame) -> go.Figure:
+    """Create a bar chart showing distribution of properties across price ranges."""
+    price_ranges = pd.cut(
+        df["list_price"],
+        bins=[0, 200000, 400000, 600000, 800000, 1000000, float("inf")],
+        labels=[
+            "$0-200k",
+            "$200k-400k",
+            "$400k-600k",
+            "$600k-800k",
+            "$800k-1M",
+            "$1M+",
+        ],
+    )
+    price_range_counts = price_ranges.value_counts().sort_index()
+    
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=price_range_counts.index,
+                y=price_range_counts.values,
+                marker_color="#1f77b4",
+            )
+        ]
+    )
+    fig.update_layout(
+        title="Distribution of Properties by Price Range",
+        xaxis_title="Price Range",
+        yaxis_title="Number of Properties",
+    )
+    return fig
